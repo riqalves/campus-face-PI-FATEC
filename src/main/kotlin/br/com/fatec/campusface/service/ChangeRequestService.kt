@@ -1,11 +1,9 @@
 package br.com.fatec.campusface.service
 
 import br.com.fatec.campusface.dto.ChangeRequestResponseDTO
-import br.com.fatec.campusface.dto.UserDTO
 import br.com.fatec.campusface.models.ChangeRequest
 import br.com.fatec.campusface.models.RequestStatus
 import br.com.fatec.campusface.models.Role
-import br.com.fatec.campusface.models.User
 import br.com.fatec.campusface.repository.ChangeRequestRepository
 import br.com.fatec.campusface.repository.OrganizationMemberRepository
 import br.com.fatec.campusface.repository.UserRepository
@@ -105,89 +103,6 @@ class ChangeRequestService(
         }
     }
 
-    fun getRequestById(requestId: String): ChangeRequestResponseDTO? {
-        val request = changeRequestRepository.findById(requestId) ?: return null
-        val user = userRepository.findById(request.userId) ?: return null
-        val member = memberRepository.findByUserIdAndOrganizationId(request.userId, request.organizationId)
-
-        // Reutiliza lógica de DTO ou cria helper
-        val currentFaceId = member?.faceImageId?.ifBlank { null } ?: user.faceImageId
-        val currentUrl = currentFaceId?.let { cloudinaryService.generateSignedUrl(it) }
-        val newUrl = cloudinaryService.generateSignedUrl(request.newFaceImageId)
-
-        return ChangeRequestResponseDTO(
-            id = request.id,
-            status = request.status,
-            requestedAt = request.requestedAt,
-            organizationId = request.organizationId,
-            userFullName = user.fullName,
-            currentFaceUrl = currentUrl,
-            newFaceUrl = newUrl,
-        )
-    }
-
-    fun listUserRequests(userId: String): List<ChangeRequestResponseDTO> {
-        val requests = changeRequestRepository.findByUserId(userId)
-        val user = userRepository.findById(userId) ?: return emptyList()
-
-        return requests.mapNotNull { req ->
-            val member = memberRepository.findByUserIdAndOrganizationId(userId, req.organizationId)
-            val currentFaceId = member?.faceImageId?.ifBlank { null } ?: user.faceImageId
-            val currentUrl = currentFaceId?.let { cloudinaryService.generateSignedUrl(it) }
-            val newUrl = cloudinaryService.generateSignedUrl(req.newFaceImageId)
-
-            ChangeRequestResponseDTO(
-                id = req.id,
-                status = req.status,
-                requestedAt = req.requestedAt,
-                organizationId = req.organizationId,
-                userFullName = user.fullName,
-                currentFaceUrl = currentUrl,
-                newFaceUrl = newUrl,
-            )
-        }
-    }
-
-    /**
-     * UPDATE: Permite reenviar a foto se o pedido ainda estiver PENDENTE.
-     */
-    fun updateRequest(requestId: String, newImage: MultipartFile): ChangeRequest {
-        val request = changeRequestRepository.findById(requestId)
-            ?: throw IllegalArgumentException("Solicitação não encontrada.")
-
-        if (request.status != RequestStatus.PENDING) {
-            throw IllegalStateException("Apenas solicitações pendentes podem ser editadas.")
-        }
-
-        // Deleta a imagem "nova" antiga do Cloudinary para não deixar lixo
-        cloudinaryService.delete(request.newFaceImageId)
-
-        // Sobe a nova imagem
-        val processedBytes = imageProcessingService.processImageForApi(newImage)
-        val uploadResult = cloudinaryService.upload(processedBytes)
-        val publicId = uploadResult["public_id"] ?: throw IllegalStateException("Erro upload.")
-
-        // Atualiza o objeto
-        val updatedRequest = request.copy(
-            newFaceImageId = publicId,
-            updatedAt = Instant.now()
-        )
-
-        return changeRequestRepository.save(updatedRequest)
-    }
-
-    fun deleteRequest(requestId: String) {
-        val request = changeRequestRepository.findById(requestId)
-            ?: throw IllegalArgumentException("Solicitação não encontrada.")
-
-        // Se for pendente, deleta a imagem do Cloudinary
-        if (request.status == RequestStatus.PENDING) {
-            cloudinaryService.delete(request.newFaceImageId)
-        }
-
-        changeRequestRepository.delete(requestId)
-    }
-
     private fun approve(request: ChangeRequest) {
         val member = memberRepository.findByUserIdAndOrganizationId(request.userId, request.organizationId)
             ?: throw IllegalStateException("Membro não encontrado.")
@@ -202,7 +117,6 @@ class ChangeRequestService(
         syncService.syncNewMember(request.organizationId, request.userId)
     }
 
-
     private fun reject(request: ChangeRequest) {
         println("DEBUG [Service] - REJEITANDO solicitação ${request.id}...")
 
@@ -212,6 +126,4 @@ class ChangeRequestService(
         val updatedReq = request.copy(status = RequestStatus.DENIED, updatedAt = Instant.now())
         changeRequestRepository.save(updatedReq)
     }
-
-
 }

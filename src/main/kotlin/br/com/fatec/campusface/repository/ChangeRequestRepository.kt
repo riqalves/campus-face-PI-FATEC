@@ -3,7 +3,6 @@ package br.com.fatec.campusface.repository
 import br.com.fatec.campusface.models.ChangeRequest
 import br.com.fatec.campusface.models.RequestStatus
 import com.google.cloud.firestore.Firestore
-import com.google.cloud.firestore.Query
 import org.springframework.stereotype.Repository
 
 @Repository
@@ -44,14 +43,6 @@ class ChangeRequestRepository(private val firestore: Firestore) {
 
         println("DEBUG [Repo] - Encontrados ${results.size} pedidos pendentes.")
         return results
-    }
-
-    fun findByUserId(userId: String): List<ChangeRequest> {
-        return collection
-            .whereEqualTo("userId",userId)
-            .orderBy("requestedAt", Query.Direction.DESCENDING)
-            .get().get()
-            .toObjects(ChangeRequest::class.java)
     }
 
     fun delete(id: String) {

@@ -26,6 +26,9 @@ class EntryRequestService(
     private val syncService: SyncService
 ) {
 
+    /**
+     * Cria um novo pedido de entrada para uma organização baseada no Código do Hub.
+     */
     fun createRequest(userId: String, data: EntryRequestCreateDTO): EntryRequestResponseDTO {
 
         val organization = organizationRepository.findByHubCode(data.hubCode)
@@ -36,6 +39,7 @@ class EntryRequestService(
             throw IllegalStateException("Você já é um membro desta Organização.")
         }
 
+        // verifica se já existe um pedido PENDENTE
         val pendingRequests = entryRequestRepository.findByOrganizationIdAndStatus(organization.id, RequestStatus.PENDING)
         if (pendingRequests.any { it.userId == userId }) {
             throw IllegalStateException("Você já possui uma solicitação pendente para esta organização.")
@@ -45,7 +49,7 @@ class EntryRequestService(
             userId = userId,
             organizationId = organization.id,
             hubCode = organization.hubCode,
-            role = data.role,
+            role = data.role, // O usuário solicita o cargo (ex: MEMBER), mas o Admin pode mudar depois
             status = RequestStatus.PENDING,
             requestedAt = Instant.now()
         )
@@ -56,6 +60,10 @@ class EntryRequestService(
         return toResponseDTO(savedRequest, user)
     }
 
+    /**
+     * Lista pedidos pendentes para um Hub.
+     * Usado pelo App do Admin para saber quem quer entrar.
+     */
     fun listPendingRequests(hubCode: String): List<EntryRequestResponseDTO> {
         val organization = organizationRepository.findByHubCode(hubCode)
             ?: throw IllegalArgumentException("Hub não encontrado")
@@ -68,7 +76,9 @@ class EntryRequestService(
         }
     }
 
-
+    /**
+     * Lista o histórico de solicitações do próprio usuário.
+     */
     fun listUserRequests(userId: String): List<EntryRequestResponseDTO> {
         val requests = entryRequestRepository.findByUserId(userId)
 
@@ -80,6 +90,12 @@ class EntryRequestService(
         }
     }
 
+    /**
+     * Aprova uma solicitação:
+     * 1. Muda status da request para APPROVED.
+     * 2. Cria o registro oficial em OrganizationMember.
+     * 3. Dispara sincronização para os totens.
+     */
     fun approveRequest(requestId: String) {
         val request = entryRequestRepository.findById(requestId)
             ?: throw IllegalArgumentException("Solicitação não encontrada")
@@ -88,15 +104,17 @@ class EntryRequestService(
             throw IllegalStateException("Esta solicitação já foi processada.")
         }
 
+        // Cria o vinculo no OrganizationMember
         val newMember = OrganizationMember(
             organizationId = request.organizationId,
             userId = request.userId,
             role = request.role,
             status = MemberStatus.ACTIVE,
-            faceImageId = null
+            faceImageId = null // Usa a foto do perfil do usuário (User)
         )
         organizationMemberRepository.save(newMember)
 
+        // atualiza listas na Organization
         when (newMember.role) {
             Role.MEMBER -> organizationRepository.addMemberToOrganization(newMember.organizationId, newMember.userId)
             Role.VALIDATOR -> organizationRepository.addValidatorToOrganization(newMember.organizationId, newMember.userId)
@@ -105,43 +123,13 @@ class EntryRequestService(
 
         entryRequestRepository.updateStatus(request.id, RequestStatus.APPROVED)
 
+        // Dispara o Upsert. O Python vai receber a foto e criar o registro no banco vetorial.
         syncService.syncNewMember(newMember.organizationId, newMember.userId)
     }
 
-    fun getRequestById(id: String): EntryRequestResponseDTO? {
-        val request = entryRequestRepository.findById(id) ?: return null
-        val user = userRepository.findById(request.userId) ?: return null
-        return toResponseDTO(request, user)
-    }
-
-
-    fun updateRequest(id: String, role: Role?): EntryRequestResponseDTO {
-        val request = entryRequestRepository.findById(id)
-            ?: throw IllegalArgumentException("Solicitação não encontrada")
-
-        if (request.status != RequestStatus.PENDING) {
-            throw IllegalStateException("Apenas solicitações pendentes podem ser editadas.")
-        }
-
-        // se o role mudou atualiza, se nao, mantem o antigo
-        val updatedRequest = if (role != null) request.copy(role = role) else request
-
-        val savedRequest = entryRequestRepository.save(updatedRequest)
-
-        val user = userRepository.findById(savedRequest.userId)
-            ?: throw IllegalStateException("Usuário não encontrado")
-
-        return toResponseDTO(savedRequest, user)
-    }
-
-    fun deleteRequest(id: String) {
-        val request = entryRequestRepository.findById(id)
-            ?: throw IllegalArgumentException("Solicitação não encontrada")
-
-
-        entryRequestRepository.delete(id)
-    }
-
+    /**
+     * Rejeita uma solicitação.
+     */
     fun rejectRequest(requestId: String) {
         val request = entryRequestRepository.findById(requestId)
             ?: throw IllegalArgumentException("Solicitação não encontrada")
@@ -153,8 +141,10 @@ class EntryRequestService(
         entryRequestRepository.updateStatus(requestId, RequestStatus.DENIED)
     }
 
+    // --- Auxiliar ---
 
     private fun toResponseDTO(entryRequest: EntryRequest, user: User): EntryRequestResponseDTO {
+        // Gera URL assinada para o admin ver a cara do sujeito antes de aprovar
         val faceUrl = user.faceImageId?.let { cloudinaryService.generateSignedUrl(it) }
         val userDTO = UserDTO.fromEntity(user, faceUrl)
 

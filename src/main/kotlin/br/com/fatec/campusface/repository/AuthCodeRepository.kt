@@ -49,18 +49,4 @@ class AuthCodeRepository(private val firestore: Firestore) {
             batch.commit().get()
         }
     }
-
-    fun findAll(): List<AuthCode> {
-        val snapshot = collection.get().get()
-        return snapshot.toObjects(AuthCode::class.java)
-    }
-
-    fun findById(id: String): AuthCode? {
-        val doc = collection.document(id).get().get()
-        return if (doc.exists()) doc.toObject(AuthCode::class.java) else null
-    }
-
-    fun delete(id: String) {
-        collection.document(id).delete().get()
-    }
 }

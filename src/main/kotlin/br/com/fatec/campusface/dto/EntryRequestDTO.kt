@@ -22,7 +22,3 @@ data class EntryRequestResponseDTO(
     val requestedAt: Instant, // ou Instant
     val user: UserDTO // Dados completos do solicitante para o Admin ver a foto
 )
-
-data class EntryRequestUpdateDTO(
-    val role: Role?
-)

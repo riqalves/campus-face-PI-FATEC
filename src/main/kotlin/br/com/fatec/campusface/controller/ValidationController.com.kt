@@ -1,6 +1,10 @@
 package br.com.fatec.campusface.controller
 
-import br.com.fatec.campusface.dto.*
+import br.com.fatec.campusface.dto.ApiResponse
+import br.com.fatec.campusface.dto.GenerateCodeRequest
+import br.com.fatec.campusface.dto.GeneratedCodeResponse
+import br.com.fatec.campusface.dto.ValidateCodeRequest
+import br.com.fatec.campusface.dto.ValidationResponseDTO
 import br.com.fatec.campusface.models.User
 import br.com.fatec.campusface.service.AuthCodeService
 import io.swagger.v3.oas.annotations.Operation
@@ -42,6 +46,7 @@ class ValidationController(
     ): ResponseEntity<ApiResponse<ValidationResponseDTO>> {
         val validator = authentication.principal as User
         return try {
+            // Passamos o ID do fiscal para validar se ele pode fiscalizar aquela org
             val validationResult = authCodeService.validateCode(request.code, validator.id)
 
             if (validationResult.valid) {
@@ -53,64 +58,6 @@ class ValidationController(
         } catch (e: IllegalAccessException) {
             ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiResponse(success = false, message = e.message, data = null))
-        } catch (e: Exception) {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse(success = false, message = e.message, data = null))
-        }
-    }
-
-    @GetMapping("/codes")
-    @Operation(summary = "Listar códigos", description = "Lista todos os QR Codes gerados (Admin).")
-    fun listCodes(): ResponseEntity<ApiResponse<List<AuthCodeResponseDTO>>> {
-        val codes = authCodeService.listAllCodes()
-        return ResponseEntity.ok(ApiResponse(success = true, message = "Códigos listados.", data = codes))
-    }
-
-    @GetMapping("/codes/{id}")
-    @Operation(summary = "Buscar código por ID", description = "Detalhes de um QR Code específico.")
-    fun getCode(@PathVariable id: String): ResponseEntity<ApiResponse<AuthCodeResponseDTO>> {
-        val code = authCodeService.getCodeById(id)
-        return if (code != null) {
-            ResponseEntity.ok(ApiResponse(success = true, message = "Código encontrado.", data = code))
-        } else {
-            ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiResponse(success = false, message = "Código não encontrado.", data = null))
-        }
-    }
-
-    @PutMapping("/codes/{id}")
-    @Operation(summary = "Atualizar código", description = "Atualiza validade ou status manualmente.")
-    fun updateCode(
-        @PathVariable id: String,
-        @RequestBody dto: AuthCodeUpdateDTO
-    ): ResponseEntity<ApiResponse<AuthCodeResponseDTO>> {
-        return try {
-            val updated = authCodeService.updateCode(id, dto)
-            ResponseEntity.ok(ApiResponse(success = true, message = "Código atualizado.", data = updated))
-        } catch (e: Exception) {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse(success = false, message = e.message, data = null))
-        }
-    }
-
-    @DeleteMapping("/codes/{id}")
-    @Operation(summary = "Deletar código", description = "Remove o registro do QR Code.")
-    fun deleteCode(@PathVariable id: String): ResponseEntity<ApiResponse<Void>> {
-        return try {
-            authCodeService.deleteCode(id)
-            ResponseEntity.ok(ApiResponse(success = true, message = "Código removido.", data = null))
-        } catch (e: Exception) {
-            ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiResponse(success = false, message = e.message, data = null))
-        }
-    }
-
-    @PostMapping("/codes/{id}/invalidate")
-    @Operation(summary = "Invalidar código", description = "Invalida um código manualmente.")
-    fun invalidateCode(@PathVariable id: String): ResponseEntity<ApiResponse<Void>> {
-        return try {
-            authCodeService.invalidateCodeManual(id)
-            ResponseEntity.ok(ApiResponse(success = true, message = "Código invalidado.", data = null))
         } catch (e: Exception) {
             ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse(success = false, message = e.message, data = null))

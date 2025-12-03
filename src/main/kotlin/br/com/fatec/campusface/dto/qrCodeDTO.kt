@@ -22,20 +22,5 @@ data class ValidateCodeRequest(
 data class ValidationResponseDTO(
     val valid: Boolean,
     val message: String,
-    val member: OrganizationMemberDTO?
-)
-
-
-data class AuthCodeResponseDTO(
-    val id: String,
-    val code: String,
-    val userId: String,
-    val organizationId: String,
-    val expirationTime: Instant,
-    val valid: Boolean
-)
-
-data class AuthCodeUpdateDTO(
-    val valid: Boolean?,
-    val expirationTime: Instant?
+    val member: OrganizationMemberDTO? // Retorna os dados completos (foto, cargo) para o fiscal conferir
 )

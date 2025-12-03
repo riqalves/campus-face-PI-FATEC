@@ -15,10 +15,12 @@ import java.time.temporal.ChronoUnit
 class AuthCodeService(
     private val authCodeRepository: AuthCodeRepository,
     private val orgMemberRepository: OrganizationMemberRepository,
-    private val orgMemberService: OrganizationMemberService
+    private val orgMemberService: OrganizationMemberService // Reutilizamos para hidratar o DTO
 ) {
 
-
+    /**
+     * Gera um QR Code para um Membro entrar em uma Organização.
+     */
     fun generateCode(userId: String, organizationId: String): GeneratedCodeResponse {
         val member = orgMemberRepository.findByUserIdAndOrganizationId(userId, organizationId)
             ?: throw IllegalArgumentException("Você não é membro desta organização.")
@@ -27,8 +29,10 @@ class AuthCodeService(
             throw IllegalStateException("Seu cadastro nesta organização não está ativo (Status: ${member.status}).")
         }
 
+        // invalida códigos velhos
         authCodeRepository.invalidatePreviousCodes(userId, organizationId)
 
+        // gera novo código
         val code = (100000..999999).random().toString() // Ex: 123456
         val expirationTime = Instant.now().plus(5, ChronoUnit.MINUTES)
 
@@ -44,26 +48,32 @@ class AuthCodeService(
         return GeneratedCodeResponse(newAuthCode.code, newAuthCode.expirationTime)
     }
 
-
+    /**
+     * Valida um código escaneado por um Validator.
+     */
     fun validateCode(code: String, validatorUserId: String): ValidationResponseDTO {
         val authCode = authCodeRepository.findValidByCode(code)
             ?: return ValidationResponseDTO(false, "Código inválido, não encontrado ou já utilizado.", null)
 
+        // Verificacao de validade temporal
         if (Instant.now().isAfter(authCode.expirationTime)) {
             authCodeRepository.invalidateCode(authCode.id)
             return ValidationResponseDTO(false, "Código expirado.", null)
         }
 
+        // Verifica se o validator tem permissão na Org do código
         val validatorMember = orgMemberRepository.findByUserIdAndOrganizationId(validatorUserId, authCode.organizationId)
 
         if (validatorMember == null ||
             (validatorMember.role != Role.VALIDATOR && validatorMember.role != Role.ADMIN) ||
             validatorMember.status != MemberStatus.ACTIVE) {
+            // Não invalidamos o código aqui, pois pode ter sido apenas um erro de quem escaneou (fiscal errado)
             throw IllegalAccessException("Você não tem permissão de VALIDATOR nesta organização.")
         }
 
         authCodeRepository.invalidateCode(authCode.id)
 
+        // busca dados do dono do código para mostrar na tela do validator
         val targetMember = orgMemberRepository.findByUserIdAndOrganizationId(authCode.userId, authCode.organizationId)
             ?: return ValidationResponseDTO(false, "Usuário do código não encontrado na organização.", null)
 
@@ -75,51 +85,4 @@ class AuthCodeService(
             member = memberDto
         )
     }
-
-    fun listAllCodes(): List<br.com.fatec.campusface.dto.AuthCodeResponseDTO> {
-        return authCodeRepository.findAll().map { toResponseDTO(it) }
-    }
-
-    fun getCodeById(id: String): br.com.fatec.campusface.dto.AuthCodeResponseDTO? {
-        val code = authCodeRepository.findById(id) ?: return null
-        return toResponseDTO(code)
-    }
-
-
-    fun updateCode(id: String, dto: br.com.fatec.campusface.dto.AuthCodeUpdateDTO): br.com.fatec.campusface.dto.AuthCodeResponseDTO {
-        val code = authCodeRepository.findById(id)
-            ?: throw IllegalArgumentException("Código não encontrado")
-
-        val updatedCode = code.copy(
-            valid = dto.valid ?: code.valid,
-            expirationTime = dto.expirationTime ?: code.expirationTime
-        )
-
-        authCodeRepository.save(updatedCode)
-        return toResponseDTO(updatedCode)
-    }
-
-    fun deleteCode(id: String) {
-        if (authCodeRepository.findById(id) == null) {
-            throw IllegalArgumentException("Código não encontrado")
-        }
-        authCodeRepository.delete(id)
-    }
-
-
-    fun invalidateCodeManual(id: String) {
-        if (authCodeRepository.findById(id) == null) {
-            throw IllegalArgumentException("Código não encontrado")
-        }
-        authCodeRepository.invalidateCode(id)
-    }
-
-    private fun toResponseDTO(code: AuthCode) = br.com.fatec.campusface.dto.AuthCodeResponseDTO(
-        id = code.id,
-        code = code.code,
-        userId = code.userId,
-        organizationId = code.organizationId,
-        expirationTime = code.expirationTime,
-        valid = code.valid
-    )
 }

@@ -1,9 +1,13 @@
 package br.com.fatec.campusface.controller
 
-import br.com.fatec.campusface.dto.*
+import br.com.fatec.campusface.dto.ApiResponse
+import br.com.fatec.campusface.dto.EntryRequestCreateDTO
+import br.com.fatec.campusface.dto.EntryRequestResponseDTO
+import br.com.fatec.campusface.dto.UserDTO
 import br.com.fatec.campusface.models.User
 import org.springframework.security.access.prepost.PreAuthorize
 import br.com.fatec.campusface.service.EntryRequestService
+import br.com.fatec.campusface.service.UserService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import jakarta.validation.Valid
@@ -17,6 +21,7 @@ import org.springframework.web.bind.annotation.*
 @SecurityRequirement(name = "bearerAuth")
 class EntryRequestController(
     private val entryRequestService: EntryRequestService,
+    private val userService: UserService
 ) {
 
     @PostMapping("/create")
@@ -56,6 +61,10 @@ class EntryRequestController(
     }
 
 
+    /**
+     * Lista todas as solicitações pendentes de um Hub específico.
+     * Acessível para Admins do Hub.
+     */
     @GetMapping("/organization/{hubCode}")
     @PreAuthorize("isAuthenticated()")
     fun listPendingRequests(@PathVariable hubCode: String): ResponseEntity<ApiResponse<List<EntryRequestResponseDTO>>> {
@@ -87,7 +96,7 @@ class EntryRequestController(
             ResponseEntity.ok(
                 ApiResponse(success = true, message = "Solicitacao aprovada com sucesso", data = null)
             )
-        } catch (e: Exception) {
+        }catch (e:Exception){
             e.printStackTrace()
             ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
                 ApiResponse(success = false, message = "Erro ao aprovar: ${e.message}", data = null)
@@ -105,9 +114,9 @@ class EntryRequestController(
             ResponseEntity.ok(
                 ApiResponse(success = true, message = "Solicitacao rejeitada", data = null)
             )
-        } catch (e: Exception) {
+        }catch (e: Exception){
             ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
-                ApiResponse(success = false, message = "Erro ao rejeitar ${e.message}", data = null)
+                ApiResponse(success = false, message ="Erro ao rejeitar ${e.message}", data = null)
             )
         }
     }
@@ -119,7 +128,7 @@ class EntryRequestController(
 
             println("TESTE whoAmI $authentication")
 
-            val userModel = authentication.principal as User
+            val userModel = authentication.principal as br.com.fatec.campusface.models.User
 
             val userResponseDto = UserDTO(
                 id = userModel.id,
@@ -164,10 +173,7 @@ class EntryRequestController(
     }
 
     @GetMapping("/my-requests")
-    @Operation(
-        summary = "Lista minhas solicitações",
-        description = "Retorna o histórico de solicitações de entrada do usuário logado."
-    )
+    @Operation(summary = "Lista minhas solicitações", description = "Retorna o histórico de solicitações de entrada do usuário logado.")
     fun listMyRequests(authentication: Authentication): ResponseEntity<ApiResponse<List<EntryRequestResponseDTO>>> {
         val user = authentication.principal as User
 
@@ -180,50 +186,5 @@ class EntryRequestController(
                 data = requests
             )
         )
-    }
-
-    @GetMapping("/{id}")
-    @Operation(summary = "Buscar solicitação por ID", description = "Detalhes de uma solicitação específica.")
-    fun getRequest(@PathVariable id: String): ResponseEntity<ApiResponse<EntryRequestResponseDTO>> {
-        val request = entryRequestService.getRequestById(id)
-        return if (request != null) {
-            ResponseEntity.ok(ApiResponse(success = true, message = "Solicitação encontrada.", data = request))
-        } else {
-            ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiResponse(success = false, message = "Solicitação não encontrada.", data = null))
-        }
-    }
-
-    @PutMapping("/{id}")
-    @Operation(
-        summary = "Atualizar solicitação",
-        description = "Permite alterar o cargo solicitado (apenas se PENDING)."
-    )
-    fun updateRequest(
-        @PathVariable id: String,
-        @RequestBody data: EntryRequestUpdateDTO,
-        authentication: Authentication
-    ): ResponseEntity<ApiResponse<EntryRequestResponseDTO>> {
-        // TODO: Adicionar validação de segurança (se quem edita é o dono da request)
-        return try {
-            val updated = entryRequestService.updateRequest(id, data.role)
-            ResponseEntity.ok(ApiResponse(success = true, message = "Solicitação atualizada.", data = updated))
-        } catch (e: Exception) {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse(success = false, message = e.message, data = null))
-        }
-    }
-
-    @DeleteMapping("/{id}")
-    @Operation(summary = "Deletar solicitação", description = "Cancela/Remove uma solicitação de entrada.")
-    fun deleteRequest(@PathVariable id: String, authentication: Authentication): ResponseEntity<ApiResponse<Void>> {
-        // TODO: adicionar validação de segurança (se quem deleta é o dono ou admin)
-        return try {
-            entryRequestService.deleteRequest(id)
-            ResponseEntity.ok(ApiResponse(success = true, message = "Solicitação removida.", data = null))
-        } catch (e: Exception) {
-            ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse(success = false, message = e.message, data = null))
-        }
     }
 }

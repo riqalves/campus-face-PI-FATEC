@@ -134,22 +134,6 @@ O sistema utiliza uma arquitetura híbrida com **Google Firestore** (NoSQL) para
     ```
     </details>
 
-    ### Argumentos
-    
-    Você deve personalizar a execução utilizando as seguintes flags:
-    
-    | Flag        | Descrição                                  | 
-    | :---        | :---                                       | 
-    | `--backend` | URL base do servidor backend               | 
-    | `--email`   | Email do validador para login              | 
-    | `--password`| Senha do validador                         | 
-    | `--hub`     | Código do Hub para envio do check-in       | 
-    | `--port`    | Porta local da aplicação (Flask)           |
-    
-    **Exemplo de uso customizado:**
-    
-    ```bash
-    python main.py --port 8080 --hub "laboratorio-A" --backend "http://localhost:3000"
 ---
 
 ## 🚀 Instruções de Instalação e Execução (Frontend - Kotlin Multiplatform)
@@ -338,5 +322,3 @@ A documentação é gerada automaticamente pelo `springdoc-openapi`.
 
 
 
-
-"# campus-face-PI-FATEC" 
